@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Cached Counter</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --ink: #eef3ff;
+      --muted: #a7b4cc;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at 50% 0%, #263557 0%, #121a2b 55%, #0b101c 100%);
+      color: var(--ink);
+      font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    .card {
+      width: min(100%, 400px);
+      padding: 40px 32px;
+      text-align: center;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 24px;
+      background: linear-gradient(160deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02));
+      box-shadow:
+        0 24px 60px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 1.35rem;
+      letter-spacing: 0.01em;
+    }
+
+    .hint {
+      margin: 0 0 28px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .readout {
+      margin-bottom: 32px;
+    }
+
+    .readout-label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    #value {
+      display: block;
+      font-size: clamp(3.5rem, 16vw, 5rem);
+      font-weight: 800;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+      text-shadow: 0 4px 18px rgba(94, 156, 255, 0.35);
+    }
+
+    .counter-button {
+      position: relative;
+      min-width: 220px;
+      padding: 16px 28px;
+      border: 1px solid #1c4fa0;
+      border-radius: 14px;
+      color: #fff;
+      font: inherit;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      /* Raised, glossy 3D body. */
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.06) 48%, rgba(0, 0, 0, 0.08) 100%),
+        linear-gradient(180deg, #5aa7ff 0%, #2f75e8 52%, #1c53b8 100%);
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.75),
+        inset 0 -2px 4px rgba(9, 35, 91, 0.45),
+        0 7px 0 #174494,
+        0 12px 18px rgba(5, 15, 40, 0.55);
+      transform: translateY(0);
+      transition: transform 110ms ease, box-shadow 110ms ease, filter 110ms ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Soft specular sweep across the top of the button. */
+    .counter-button::before {
+      content: "";
+      position: absolute;
+      inset: 2px 2px 50%;
+      border-radius: 11px 11px 40% 40%;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0));
+      pointer-events: none;
+    }
+
+    .counter-button:hover {
+      filter: brightness(1.08);
+    }
+
+    .counter-button:focus-visible {
+      outline: 3px solid #a8d0ff;
+      outline-offset: 4px;
+    }
+
+    /* Pressed state: the cap drops onto its shadow and the highlight dims. */
+    .counter-button:active {
+      transform: translateY(6px);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.12) 0%, rgba(0, 0, 0, 0.06) 100%),
+        linear-gradient(180deg, #2470d8 0%, #1f5cbd 100%);
+      box-shadow:
+        inset 0 2px 6px rgba(6, 26, 70, 0.6),
+        inset 0 -1px 0 rgba(255, 255, 255, 0.2),
+        0 1px 0 #174494,
+        0 3px 6px rgba(5, 15, 40, 0.5);
+    }
+
+    .counter-button:active::before {
+      opacity: 0.25;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .counter-button {
+        transition: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Cached Counter</h1>
+    <p class="hint">Your count stays in this browser, even after a reload.</p>
+
+    <div class="readout">
+      <span class="readout-label">Current count</span>
+      <output id="value" aria-live="polite">0</output>
+    </div>
+
+    <button id="increment" class="counter-button" type="button">Increment</button>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var STORAGE_KEY = "fancy-counter.value";
+      var DECIMAL_INTEGER = /^(0|[1-9][0-9]*)$/;
+      var valueEl = document.getElementById("value");
+      var buttonEl = document.getElementById("increment");
+      var count = 0;
+
+      function readCount() {
+        try {
+          var raw = localStorage.getItem(STORAGE_KEY);
+          if (raw === null) {
+            return 0;
+          }
+          // Accept only canonical decimal integer strings written by writeCount().
+          if (!DECIMAL_INTEGER.test(raw)) {
+            return 0;
+          }
+          var parsed = Number(raw);
+          // Reject values outside the safe-integer range.
+          return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+        } catch (error) {
+          // Storage can be blocked or throw; fall back to an in-memory count.
+          return 0;
+        }
+      }
+
+      function writeCount(next) {
+        try {
+          localStorage.setItem(STORAGE_KEY, String(next));
+        } catch (error) {
+          // Keep the UI usable when storage is unavailable.
+        }
+      }
+
+      function render() {
+        valueEl.textContent = String(count);
+      }
+
+      // Missing or invalid cached values are normalized to 0 and persisted.
+      count = readCount();
+      writeCount(count);
+      render();
+
+      buttonEl.addEventListener("click", function () {
+        // Never write an unsafe value; stay at Number.MAX_SAFE_INTEGER.
+        count = Math.min(count + 1, Number.MAX_SAFE_INTEGER);
+        writeCount(count);
+        render();
+      });
+    })();
+  </script>
+</body>
+</html>
